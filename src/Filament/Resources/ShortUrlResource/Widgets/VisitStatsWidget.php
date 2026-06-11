@@ -7,6 +7,7 @@ namespace VasilGerginski\MarketingSuite\Filament\Resources\ShortUrlResource\Widg
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use VasilGerginski\MarketingSuite\Models\EventSubmission;
 use VasilGerginski\MarketingSuite\Models\ShortUrl;
 use VasilGerginski\MarketingSuite\Models\ShortUrlVisit;
@@ -43,13 +44,18 @@ class VisitStatsWidget extends BaseWidget
             ? round(($totalConversions / $totalVisits) * 100, 1)
             : 0.0;
 
-        // Average time to convert
+        // Average time to convert, computed in PHP: epoch arithmetic has no
+        // portable SQL spelling (EXTRACT(EPOCH ...) is PostgreSQL-only and
+        // takes the whole widget down on MySQL and SQLite).
         $avgTimeToConvert = null;
         if ($totalConversions > 0) {
             $avgSeconds = (clone $submissionsQuery)
                 ->join('short_url_visits', 'short_url_visits.id', '=', 'event_submissions.short_url_visit_id')
-                ->selectRaw('AVG(EXTRACT(EPOCH FROM (event_submissions.created_at - short_url_visits.visited_at))) as avg_seconds')
-                ->value('avg_seconds');
+                ->whereNotNull('short_url_visits.visited_at')
+                ->toBase()
+                ->get(['event_submissions.created_at as converted_at', 'short_url_visits.visited_at as visited_at'])
+                ->map(static fn (object $row): int => Carbon::parse($row->converted_at)->getTimestamp() - Carbon::parse($row->visited_at)->getTimestamp())
+                ->avg();
 
             if ($avgSeconds !== null && $avgSeconds > 0) {
                 $avgMinutes = round($avgSeconds / 60);
