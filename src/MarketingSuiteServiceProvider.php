@@ -48,8 +48,11 @@ class MarketingSuiteServiceProvider extends PackageServiceProvider
 
         // Keep generated short links actually short (e.g. yoursite.com/s/Xk3aP).
         // Set marketing-suite.short_urls.prefix to null to keep the prefix
-        // configured in the short-url package instead.
-        if ($prefix = $this->app['config']->get('marketing-suite.short_urls.prefix')) {
+        // configured in the short-url package instead. The fallback covers
+        // hosts that published this config before the prefix key existed:
+        // Laravel's config merge is not recursive, so their short_urls array
+        // shadows the packaged default and the key comes back missing.
+        if ($prefix = $this->app['config']->get('marketing-suite.short_urls.prefix', '/s')) {
             $this->app['config']->set('short-url.prefix', $prefix);
         }
 
